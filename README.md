@@ -1,5 +1,5 @@
 # ARCADE - Automatic Region-based Coronary Artery Disease Diagnostics using x-ray angiography imagEs
-![GDSC Solution Challenge Logo](https://github.com/PffTRUBETSKOY/angio_solution_challenge2023/blob/main/image.jpg?raw=true)
+![GDSC Solution Challenge Logo](https://github.com/PffTRUBETSKOY/angio_solution_challenge2023/blob/main/imgs/solution.jpg)
 
 # Links
 URL: TBA
