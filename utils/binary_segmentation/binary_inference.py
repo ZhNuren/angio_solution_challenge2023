@@ -23,5 +23,4 @@ model = load_model(args.weights)
 
 img = cv2.imread(args.source, cv2.IMREAD_GRAYSCALE)
 pred = model.predict(np.expand_dims(img, axis=0)/255)
-print(pred.shape)
 cv2.imwrite(args.output, pred[0].argmax(axis=2)*255)
