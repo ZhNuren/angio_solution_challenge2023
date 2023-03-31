@@ -1,1 +1,13 @@
 utils/binary_segmentation/weights/binary_sample.h5
+IM_0002
+IM_0825
+IM_1567
+utils/region_segmentation/weights/best.pt
+utils/region_segmentation/weights/cat_yolov8x.pt
+utils/stenosis_segmentation/weights/best.pt
+utils/stenosis_segmentation/__pycache__/segment_stenosis.cpython-310.pyc
+utils/region_segmentation/__pycache__/segment_regions.cpython-310.pyc
+utils/preprocess/__pycache__/contrast_func.cpython-310.pyc
+utils/binary_segmentation/__pycache__/frame_extractor.cpython-310.pyc
+utils/stenosis_segmentation/test.ipynb
+utils/region_segmentation/test.ipynb

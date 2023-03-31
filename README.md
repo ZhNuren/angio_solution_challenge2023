@@ -15,11 +15,11 @@ With this project, we aim to provide an automated diagnostics tool that is able 
 Dataset will be published with MICCAI2023 [ARCADE challenge](arcade.grand-challenge.org)
 
 # Tech Stack
-- Tensorflow
-- Keras
+- Python (Tensorflow, Keras, OpenCV)
 - Golang
 - Angular.js
 - Google Compute Engine
+
 
 # Authors
 - Beknur Raissov

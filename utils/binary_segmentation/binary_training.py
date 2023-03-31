@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.utils import Sequence
+from keras.utils import Sequence
 from albumentations import ShiftScaleRotate, Flip, GridDistortion
 from skimage import morphology
 import os
