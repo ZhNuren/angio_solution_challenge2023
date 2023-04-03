@@ -12,6 +12,6 @@ utils/binary_segmentation/__pycache__/frame_extractor.cpython-310.pyc
 utils/stenosis_segmentation/test.ipynb
 utils/region_segmentation/test.ipynb
 angio
-utils\stenosis_segmentation\__pycache__
-utils\region_segmentation\__pycache__
-utils\preprocess\__pycache__
+utilst/senosis_segmentation/__pycache__
+utils/region_segmentation/__pycache__
+utils/preprocess/__pycache__

@@ -55,15 +55,34 @@ while True:
             pos = np.where(msks.sum(axis=0).sum(axis=0)>0)  
             stenosis = np.sum(msks[:,:,pos[0]], axis=2)
             report = ""
-            for cl_name, rect in class_mat:
-                for i, mask in enumerate(masks):
-                    if (cv2.resize(mask, (512,512))*cv2.resize(rect, (512,512))).sum()
-                    report += 
+            print(len(class_mat), "instances of stenosis found")
+            sten_intercepts = np.zeros((len(class_mat), 512, 512))
+            for i, (cl_name, rect, conf) in enumerate(class_mat):
+                # for mask in masks: 
+                #     if rect[(rect>0) & (mask.numpy()>0)].shape[0]>0:
+                #         sten[(rect>0) & (mask.numpy()>0)] = 1
+                sten_intercepts[i] = (cv2.resize(masks.permute(1,2,0).numpy(), (512,512)).sum(axis=2)>0) * cv2.resize(rect, (512,512))
+                print(i, sten_intercepts[i].sum())
+            hold = np.ones((len(class_mat)))
+            for i, sten1 in enumerate(sten_intercepts):
+                if sten1.sum() != 0:
+                    for j, sten2 in enumerate(sten_intercepts[i+1:]):
+                        if sten2.sum() != 0:
+                            if sten1[(sten1>0) & (sten2>0)].shape[0]/sten1[sten1>0].shape[0]>0.5 or sten1[(sten1>0) & (sten2>0)].shape[0]/sten2[sten2>0].shape[0]>0.5:
+                                if class_mat[i][2] > class_mat[i+j+1][2]:
+                                    hold[i+j+1] = 0
+                                else:
+                                    hold[i] = 0
+            for j, (cl_name, rect, conf) in enumerate(class_mat):
+                if hold[j] == 1:
+                    for i, mask in enumerate(masks): 
+                        if rect[(rect>0) & (mask.numpy()>0)].shape[0]>0:
+                            report += f"Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]} with confidence {conf*100:.2f}%. Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%.\n"
 
-            
+            print(report)
             pix_size = calculate_pixel_size(pred)
-            print(calculate_region_width(stenosis, pix_size))
-            cls = pred.boxes.cls[pos].numpy()      
+            # print(calculate_region_width(stenosis, pix_size))
+            # cls = pred.boxes.cls[pos].numpy()      
 
             poly_annotator = sv.BoxAnnotator(
                     thickness=1,
@@ -86,7 +105,7 @@ while True:
                 labels=labels,
                 skip_label=False
             ) 
-            print(frame.shape, frame[stenosis>0].shape)
+            # print(frame.shape, frame[stenosis>0].shape)
             frame[stenosis>0] = np.array([0,0,255])
 
 
