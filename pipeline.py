@@ -9,7 +9,7 @@ from utils.stenosis_segmentation.segment_stenosis import segment_stenosis
 from utils.binary_segmentation.frame_extractor import extract_frame
 import supervision as sv
 from utils.preprocess.contrast_func import improve_contrast
-
+from utils.region_segmentation.extract_cat import calculate_pixel_size, calculate_region_width
 parser = argparse.ArgumentParser(
                     prog='Coronary Angiography Analysis Pipeline',
                     description='This program identifies coronary regions according to the Syntax Score methodology, detects atherosclerotic plaques inside them, and provides health report',
@@ -50,17 +50,26 @@ while True:
             command = 0
             pred, names = segment_regions(args.region_weights, d3[id%3])
             masks = pred.masks.masks
-            mat = segment_stenosis(args.stenosis_weights, improve_contrast(d3[id%3]))
+            class_mat, mat = segment_stenosis(args.stenosis_weights, improve_contrast(d3[id%3]))
             msks = cv2.resize(masks.permute(1,2,0).numpy(), (512,512)) * cv2.resize(mat, (512,512))[:,:,np.newaxis]
             pos = np.where(msks.sum(axis=0).sum(axis=0)>0)  
             stenosis = np.sum(msks[:,:,pos[0]], axis=2)
-             
+            report = ""
+            for cl_name, rect in class_mat:
+                for i, mask in enumerate(masks):
+                    if (cv2.resize(mask, (512,512))*cv2.resize(rect, (512,512))).sum()
+                    report += 
+
+            
+            pix_size = calculate_pixel_size(pred)
+            print(calculate_region_width(stenosis, pix_size))
             cls = pred.boxes.cls[pos].numpy()      
 
             poly_annotator = sv.BoxAnnotator(
                     thickness=1,
                     text_thickness=1,
-                    text_scale=1
+                    text_scale=0.4,
+                    text_padding=2
                 )
             detections = sv.Detections.from_yolov8(pred)
             detections.xyxy = detections.xyxy[pos]
@@ -74,12 +83,12 @@ while True:
             frame = poly_annotator.annotate(
                 scene=d3[id%3], 
                 detections=detections, 
-                labels=labels
+                labels=labels,
+                skip_label=False
             ) 
             print(frame.shape, frame[stenosis>0].shape)
             frame[stenosis>0] = np.array([0,0,255])
-            cv2.imshow("ARCADE", frame)
-            cv2.waitKey()
+
 
         mat_frame[0:512,0:512] = d3[id%3]
         cv2.putText(mat_frame, "a - analyze", (mat_frame.shape[1]-250, 55), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
