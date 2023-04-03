@@ -4,12 +4,14 @@ import argparse
 from keras.models import load_model
 import cv2
 import easygui
+import matplotlib.pyplot as plt
 from utils.region_segmentation.segment_regions import segment_regions
 from utils.stenosis_segmentation.segment_stenosis import segment_stenosis
 from utils.binary_segmentation.frame_extractor import extract_frame
 import supervision as sv
 from utils.preprocess.contrast_func import improve_contrast
 from utils.region_segmentation.extract_cat import calculate_pixel_size, calculate_region_width
+from scipy.interpolate import make_interp_spline
 parser = argparse.ArgumentParser(
                     prog='Coronary Angiography Analysis Pipeline',
                     description='This program identifies coronary regions according to the Syntax Score methodology, detects atherosclerotic plaques inside them, and provides health report',
@@ -62,6 +64,7 @@ while True:
                 #     if rect[(rect>0) & (mask.numpy()>0)].shape[0]>0:
                 #         sten[(rect>0) & (mask.numpy()>0)] = 1
                 sten_intercepts[i] = (cv2.resize(masks.permute(1,2,0).numpy(), (512,512)).sum(axis=2)>0) * cv2.resize(rect, (512,512))
+
                 print(i, sten_intercepts[i].sum())
             hold = np.ones((len(class_mat)))
             for i, sten1 in enumerate(sten_intercepts):
@@ -73,6 +76,29 @@ while True:
                                     hold[i+j+1] = 0
                                 else:
                                     hold[i] = 0
+                        else:
+                            hold[i+j+1] = 0
+                else:
+                    hold[i] = 0
+            pix_size = calculate_pixel_size(pred)
+            print(hold)
+            for i, mask_intercept in enumerate(sten_intercepts[hold>0]):
+                print(mask_intercept.shape)
+                
+                widths = calculate_region_width(mask_intercept, pix_size)
+                print(len(widths))
+                # fig.scatter(np.arange(len(widths)), widths)
+                X_Y_Spline = make_interp_spline(np.arange(len(widths)), widths) 
+  
+                # Returns evenly spaced numbers 
+                # over a specified interval. 
+                X_ = np.linspace(np.arange(len(widths)).min(), np.arange(len(widths)).max(), 500) 
+                Y_ = X_Y_Spline(X_) 
+                # Plotting the Graph 
+                plt.figure(i)
+                plt.plot(X_, Y_)
+                # plt.plot(np.arange(len(widths)), widths)
+                plt.savefig(f"graph{i}.png")
             for j, (cl_name, rect, conf) in enumerate(class_mat):
                 if hold[j] == 1:
                     for i, mask in enumerate(masks): 
@@ -80,7 +106,7 @@ while True:
                             report += f"Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]} with confidence {conf*100:.2f}%. Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%.\n"
 
             print(report)
-            pix_size = calculate_pixel_size(pred)
+            # pix_size = calculate_pixel_size(pred)
             # print(calculate_region_width(stenosis, pix_size))
             # cls = pred.boxes.cls[pos].numpy()      
 
@@ -106,7 +132,7 @@ while True:
                 skip_label=False
             ) 
             # print(frame.shape, frame[stenosis>0].shape)
-            frame[stenosis>0] = np.array([0,0,255])
+            frame[sten_intercepts[hold>0].sum(axis=0)>0] = np.array([0,0,255])
 
 
         mat_frame[0:512,0:512] = d3[id%3]
