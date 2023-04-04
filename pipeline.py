@@ -88,15 +88,15 @@ while True:
                     else:
                         hold[i] = 0
                 pix_size = calculate_pixel_size(pred)
-                for idx, mask_intercept in zip(np.where(hold>0)[0], sten_intercepts[hold>0]):
-                    widths = calculate_region_width(mask_intercept, pix_size)[5:-5]
-                    X_Y_Spline = make_interp_spline(np.arange(len(widths)), widths) 
-                    X_ = np.linspace(np.arange(len(widths)).min(), np.arange(len(widths)).max(), 500) 
-                    Y_ = X_Y_Spline(X_) 
-                    plt.figure(time.time_ns())
-                    plt.plot(X_, Y_)
-                    plt.ylabel("width of stenosis")
-                    plt.savefig(f"tmp/graph{id%3}_{idx}.png")
+                # for idx, mask_intercept in zip(np.where(hold>0)[0], sten_intercepts[hold>0]):
+                #     widths = calculate_region_width(mask_intercept, pix_size)[5:-5]
+                #     X_Y_Spline = make_interp_spline(np.arange(len(widths)), widths) 
+                #     X_ = np.linspace(np.arange(len(widths)).min(), np.arange(len(widths)).max(), 500) 
+                #     Y_ = X_Y_Spline(X_) 
+                #     plt.figure(time.time_ns())
+                #     plt.plot(X_, Y_)
+                #     plt.ylabel("width of stenosis")
+                #     plt.savefig(f"tmp/graph{id%3}_{idx}.png")
 
                 path = os.path.abspath(".")
                 for j, (cl_name, rect, conf) in enumerate(class_mat):
@@ -106,13 +106,30 @@ while True:
 
                                 report += f"Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]} with confidence {conf*100:.2f}%. Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%.\n"
                                 reports+=[f"Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]}", f"with confidence {conf*100:.2f}%.", f"Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%."]
-                                rectangle = np.array(np.where(best_mat[id%3, :, :, 0] * cv2.resize(rect, (512,512))>0)).T
+                                rectangle = np.array(np.where(best_mat[id%3, :, :, 0] * cv2.resize(rect, (512,512))>0)).T 
                                 w,h = rectangle[-1] - rectangle[0]
-                                export_rect = best_mat[id%3, rectangle[0,0]-10:rectangle[0,0]+w+10, rectangle[0,1]-10:rectangle[0,1]+h+10]
-                                cv2.imwrite(f"tmp/rect{id%3}_{j}.png", cv2.resize(export_rect, (400,400)))
+                                mask_resized = cv2.resize(mask.numpy(), (512,512)).astype(np.uint8)
+                                mask_outline = cv2.Canny(mask_resized, 1, 1)
+                                outlined_mat = d3_orig.copy()
+                                outlined_mat[id%3, mask_outline>0] = np.array([0,0,255])
+                                export_rect = outlined_mat[id%3, rectangle[0,0]-10:rectangle[0,0]+w+10, rectangle[0,1]-10:rectangle[0,1]+h+10]
+
+
+                                mask_intercept = mask_resized[rectangle[0,0]-10:rectangle[0,0]+w+10, rectangle[0,1]-10:rectangle[0,1]+h+10]
+                                widths = calculate_region_width(mask_intercept, pix_size)[5:-5]
+                                X_Y_Spline = make_interp_spline(np.arange(len(widths)), widths) 
+                                X_ = np.linspace(np.arange(len(widths)).min(), np.arange(len(widths)).max(), 500) 
+                                Y_ = X_Y_Spline(X_) 
+                                plt.figure(time.time_ns())
+                                plt.plot(X_, Y_)
+                                plt.ylabel("width of stenosis")
+                                plt.savefig(f"tmp/graph{id%3}_{j}_{i}.png")
+
+
+                                cv2.imwrite(f"tmp/rect{id%3}_{j}_{i}.png", cv2.resize(export_rect, (400,400)))
                                 
                                 html_report += f"<li>Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]} with confidence {conf*100:.2f}%. Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%.\n<br>"
-                                html_report += f'<img src="{path}\\tmp\\rect{id%3}_{j}.png"><img src="{path}\\tmp\\graph{id%3}_{j}.png" width="400" height="400"><br></li>\n'
+                                html_report += f'<img src="{path}\\tmp\\rect{id%3}_{j}_{i}.png"><img src="{path}\\tmp\\graph{id%3}_{j}_{i}.png" width="400" height="400"><br></li>\n'
                 print(report)
 
                 poly_annotator = sv.BoxAnnotator(
@@ -182,8 +199,8 @@ while True:
 }
             li { font-size: 24px; }</style><body>''' + "\n".join(output_text) + "</body>"
 
-                        config = pdfkit.configuration(wkhtmltopdf=r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe')
-                        pdfkit.from_string(output_text, f'tmp/report{id%3}_Patient{dcm_data.PatientID}.pdf', configuration=config, css='style.css', options={"enable-local-file-access": ""})
+                        config = pdfkit.configuration(wkhtmltopdf='G:\\soft\\wkhtmltopdf\\bin\\wkhtmltopdf.exe')
+                        pdfkit.from_string(output_text, f'tmp/report{id%3}_Patient{dcm_data.PatientID}.pdf', configuration=config, options={"enable-local-file-access": ""})
                         os.system(f'{path}/tmp/report{id%3}_Patient{dcm_data.PatientID}.pdf')
 
 
