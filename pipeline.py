@@ -15,6 +15,7 @@ from scipy.interpolate import make_interp_spline
 import time
 import jinja2
 import pdfkit
+import os
 from datetime import datetime
 parser = argparse.ArgumentParser(
                     prog='Coronary Angiography Analysis Pipeline',
@@ -64,6 +65,7 @@ while True:
             pos = np.where(msks.sum(axis=0).sum(axis=0)>0)  
             stenosis = np.sum(msks[:,:,pos[0]], axis=2)
             report = ""
+            html_report = ""
             reports = []
             print(len(class_mat), "instances of stenosis found")
             sten_intercepts = np.zeros((len(class_mat), 512, 512))
@@ -96,15 +98,26 @@ while True:
                 # Plotting the Graph 
                 plt.figure(time.time_ns())
                 plt.plot(X_, Y_)
+                plt.ylabel("width of stenosis")
                 plt.savefig(f"tmp/graph{id%3}_{idx}.png")
 
+
+
+            path = os.path.abspath(".")
             for j, (cl_name, rect, conf) in enumerate(class_mat):
                 if hold[j] == 1:
                     for i, mask in enumerate(masks): 
                         if rect[(rect>0) & (mask.numpy()>0)].shape[0]>0:
+
                             report += f"Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]} with confidence {conf*100:.2f}%. Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%.\n"
                             reports+=[f"Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]}", f"with confidence {conf*100:.2f}%.", f"Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%."]
-
+                            rectangle = np.array(np.where(best_mat[id%3, :, :, 0] * cv2.resize(rect, (512,512))>0)).T
+                            w,h = rectangle[-1] - rectangle[0]
+                            export_rect = best_mat[id%3, rectangle[0,0]-10:rectangle[0,0]+w+10, rectangle[0,1]-10:rectangle[0,1]+h+10]
+                            cv2.imwrite(f"tmp/rect{id%3}_{j}.png", cv2.resize(export_rect, (400,400)))
+                            
+                            html_report += f"<li>Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]} with confidence {conf*100:.2f}%. Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%.\n<br>"
+                            html_report += f'<img src="{path}\\tmp\\rect{id%3}_{j}.png"><img src="{path}\\tmp\\graph{id%3}_{j}.png" width="400" height="400"><br></li>\n'
             print(report)
             # pix_size = calculate_pixel_size(pred)
             # print(calculate_region_width(stenosis, pix_size))
@@ -132,7 +145,13 @@ while True:
                 skip_label=False
             ) 
 
+            for j, bbxvessel in zip(labels,detections.xyxy):
+                    box = best_mat[id%3, :, :, 0][int(bbxvessel[1]):int(bbxvessel[3]),int(bbxvessel[0]):int(bbxvessel[2])]
+                    cv2.imwrite(f"tmp/bbxvessel{id%3}_{j.split()[0]}.png", cv2.resize(box, (int(box.shape[1]*4),int(box.shape[0]*4))))
+
             frame[sten_intercepts[hold>0].sum(axis=0)>0] = np.array([0,0,255])
+            cv2.imwrite(f"tmp/d3{id%3}.png", frame)
+
             report_frame = np.ones((512,512,3))*255
             if reports:
                 offset = 115
@@ -147,17 +166,17 @@ while True:
             template = template_env.get_template('report.html')
 
             context = {'name': dcm_data.PatientID, 'dob': dcm_data.PatientBirthDate, 'doe': f"{dcm_data.StudyDate[:4]} \
-                       {dcm_data.StudyDate[4:6]} {dcm_data.StudyDate[6:]}, {dcm_data.StudyTime[:2]}:{dcm_data.StudyTime[2:4]}:{dcm_data.StudyTime[4:]}"}
+                       {dcm_data.StudyDate[4:6]} {dcm_data.StudyDate[6:]}, {dcm_data.StudyTime[:2]}:{dcm_data.StudyTime[2:4]}:{dcm_data.StudyTime[4:]}", 'date':time.strftime('%Y_%m_%d-%H_%M_%S')}
             output_text = template.render(context)
             output_text = output_text.split("\n")
+            output_text = output_text[:8] + [html_report] + output_text[8:]
+            output_text = '''<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/></head><style>p { font-size: 24px; }
+li { font-size: 24px; }</style><body>''' + "\n".join(output_text) + "</body>"
+            with open("hui.txt", "w") as file:
+                file.write(output_text)
 
-            cv2.imwrite(f"tmp/d3{id%3}.png", frame)
-            for j, (cl_name, rect, conf) in enumerate(class_mat):
-                if hold[j] == 1:
-                    rectangle = np.array(np.where(best_mat[id%3, :, :, 0] * cv2.resize(rect, (512,512))>0)).T
-                    w,h = rectangle[-1] - rectangle[0]
-                    export_rect = best_mat[id%3, rectangle[0,0]:rectangle[0,0]+h+1, rectangle[0,1]:rectangle[0,1]+w+1]
-                    cv2.imwrite(f"tmp/rect{id%3}_{j}.png", cv2.resize(export_rect, (512,512)))
+            config = pdfkit.configuration(wkhtmltopdf='G:/soft/wkhtmltopdf/bin/wkhtmltopdf.exe')
+            pdfkit.from_string(output_text, 'pdf_generated.pdf', configuration=config, css='style.css', options={"enable-local-file-access": ""})
 
             d3[id%3] = frame
 
@@ -175,7 +194,6 @@ while True:
         if k != -1 and k != ord('q'):
             command = k
 
-import os
 from glob import glob
 for i in glob("tmp/*"):
     os.remove(i)

@@ -18,4 +18,5 @@ utils/preprocess/__pycache__
 tmp/*
 utils/binary_segmentation/__pycache__
 test.ipynb
-
+pdf_generated.pdf
+hui.txt
