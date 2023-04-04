@@ -16,6 +16,7 @@ import time
 import jinja2
 import pdfkit
 import os
+from glob import glob
 from datetime import datetime
 parser = argparse.ArgumentParser(
                     prog='Coronary Angiography Analysis Pipeline',
@@ -28,7 +29,7 @@ parser.add_argument('--stenosis_weights', '-sw', default="utils/stenosis_segment
 parser.add_argument('--output', '-o', default="out_binary.png")
 args = parser.parse_args()
 analyzepressed = [0,0,0]
-visited = [0,0,0]
+lesionfound = 0
 while True:
     img = cv2.imread("imgs/solution.jpg")
     cv2.putText(img, "u - upload DICOM file", (55, 55), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
@@ -53,20 +54,26 @@ while True:
         while True:
             if command == ord('f'): 
                 id += 1
+                lesionfound = 0
                 command=0
                 
             elif command == ord('a'):
+                path = os.path.abspath(".")
+                if(os.path.exists(f'{path}/tmp/report{id%3}_Patient{dcm_data.PatientID}.pdf')):
+                    os.remove(f'{path}/tmp/report{id%3}_Patient{dcm_data.PatientID}.pdf')
                 analyzepressed[id%3] = 1
                 command = 0
                 pred, names = segment_regions(args.region_weights, d3[id%3])
                 masks = pred.masks.masks
                 class_mat, mat = segment_stenosis(args.stenosis_weights, improve_contrast(d3[id%3]))
                 msks = cv2.resize(masks.permute(1,2,0).numpy(), (512,512)) * cv2.resize(mat, (512,512))[:,:,np.newaxis]
-                pos = np.where(msks.sum(axis=0).sum(axis=0)>0)  
+                pos = np.where(msks.sum(axis=0).sum(axis=0)>0) 
                 stenosis = np.sum(msks[:,:,pos[0]], axis=2)
                 report = ""
                 html_report = ""
                 reports = []
+                if (len(class_mat)>0):
+                    lesionfound = 1
                 print(len(class_mat), "instances of stenosis found")
                 sten_intercepts = np.zeros((len(class_mat), 512, 512))
 
@@ -98,7 +105,7 @@ while True:
                 #     plt.ylabel("width of stenosis")
                 #     plt.savefig(f"tmp/graph{id%3}_{idx}.png")
 
-                path = os.path.abspath(".")
+  
                 for j, (cl_name, rect, conf) in enumerate(class_mat):
                     if hold[j] == 1:
                         for i, mask in enumerate(masks): 
@@ -154,14 +161,18 @@ while True:
                     skip_label=False
                 ) 
 
-                for j, bbxvessel in zip(labels,detections.xyxy):
-                        box = best_mat[id%3, :, :, 0][int(bbxvessel[1]):int(bbxvessel[3]),int(bbxvessel[0]):int(bbxvessel[2])]
-                        cv2.imwrite(f"tmp/bbxvessel{id%3}_{j.split()[0]}.png", cv2.resize(box, (int(box.shape[1]*4),int(box.shape[0]*4))))
+                # for j, bbxvessel in zip(labels,detections.xyxy):
+                #         box = best_mat[id%3, :, :, 0][int(bbxvessel[1]):int(bbxvessel[3]),int(bbxvessel[0]):int(bbxvessel[2])]
+                #         cv2.imwrite(f"tmp/bbxvessel{id%3}_{j.split()[0]}.png", cv2.resize(box, (int(box.shape[1]*4),int(box.shape[0]*4))))
 
                 frame[sten_intercepts[hold>0].sum(axis=0)>0] = np.array([0,0,255])
                 cv2.imwrite(f"tmp/d3{id%3}.png", frame)
 
                 report_frame = np.ones((512,512,3))*255
+                if(lesionfound==0):
+                    reports += ["No lesion was found"]
+                    html_report += f"<li>No lesion was found\n<br>"
+
                 if reports:
                     offset = 95
                     for i, s in enumerate(reports):
@@ -209,13 +220,17 @@ while True:
             
             cv2.putText(mat_frame, "a - analyze", (mat_frame.shape[1]-350, 35), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
             cv2.putText(mat_frame, "f - next frame", (mat_frame.shape[1]-350, 55), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
-            cv2.putText(mat_frame, "b - back", (mat_frame.shape[1]-350, 75), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
+            cv2.putText(mat_frame, "b - upload another DICOM file", (mat_frame.shape[1]-350, 75), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
 
            
 
             cv2.imshow("ARCADE", mat_frame)
             k = cv2.waitKey(1)
             if k == ord('b'):
+                analyzepressed = [0,0,0]
+                lesionfound = 0
+                for i in glob("tmp/*"):
+                    os.remove(i)
                 break
             if k != -1 and k != ord('q'):
                 command = k
@@ -224,6 +239,6 @@ while True:
 
 
 
-from glob import glob
+
 for i in glob("tmp/*"):
     os.remove(i)
