@@ -70,7 +70,6 @@ while True:
 
             for i, (cl_name, rect, conf) in enumerate(class_mat):
                 sten_intercepts[i] = (cv2.resize(masks.permute(1,2,0).numpy(), (512,512)).sum(axis=2)>0) * cv2.resize(rect, (512,512))
-                print(i, sten_intercepts[i].sum())
 
             hold = np.ones((len(class_mat)))
             for i, sten1 in enumerate(sten_intercepts):
@@ -87,20 +86,17 @@ while True:
                 else:
                     hold[i] = 0
             pix_size = calculate_pixel_size(pred)
-            print(hold)
             for idx, mask_intercept in zip(np.where(hold>0)[0], sten_intercepts[hold>0]):
                 widths = calculate_region_width(mask_intercept, pix_size)[5:-5]
-                print(len(widths))
                 X_Y_Spline = make_interp_spline(np.arange(len(widths)), widths) 
                 # Returns evenly spaced numbers 
                 # over a specified interval. 
                 X_ = np.linspace(np.arange(len(widths)).min(), np.arange(len(widths)).max(), 500) 
                 Y_ = X_Y_Spline(X_) 
                 # Plotting the Graph 
-                print("(id%3)*100+idx", (id%3)*100+idx)
-                plt.figure((id%3)*100+idx)
+                plt.figure(time.time_ns())
                 plt.plot(X_, Y_)
-                plt.savefig(f"tmp/graph{id%3*100+idx}.png")
+                plt.savefig(f"tmp/graph{id%3}_{idx}.png")
 
             for j, (cl_name, rect, conf) in enumerate(class_mat):
                 if hold[j] == 1:
@@ -108,6 +104,7 @@ while True:
                         if rect[(rect>0) & (mask.numpy()>0)].shape[0]>0:
                             report += f"Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]} with confidence {conf*100:.2f}%. Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%.\n"
                             reports+=[f"Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]}", f"with confidence {conf*100:.2f}%.", f"Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%."]
+
             print(report)
             # pix_size = calculate_pixel_size(pred)
             # print(calculate_region_width(stenosis, pix_size))
@@ -134,12 +131,9 @@ while True:
                 labels=labels,
                 skip_label=False
             ) 
-            # print(frame.shape, frame[stenosis>0].shape)
+
             frame[sten_intercepts[hold>0].sum(axis=0)>0] = np.array([0,0,255])
             report_frame = np.ones((512,512,3))*255
-            # report_part[id%3] = d3[id%3]
-            # (mat_frame.shape[1]-500, offset)
-            print(reports)
             if reports:
                 offset = 115
                 for i, s in enumerate(reports):
@@ -156,12 +150,15 @@ while True:
                        {dcm_data.StudyDate[4:6]} {dcm_data.StudyDate[6:]}, {dcm_data.StudyTime[:2]}:{dcm_data.StudyTime[2:4]}:{dcm_data.StudyTime[4:]}"}
             output_text = template.render(context)
             output_text = output_text.split("\n")
-            cv2.imwrite(f"tmp/d3{id%3}.png", d3[id%3])
+
+            cv2.imwrite(f"tmp/d3{id%3}.png", frame)
             for j, (cl_name, rect, conf) in enumerate(class_mat):
                 if hold[j] == 1:
-                    cv2.imwrite(f"tmp/rect{j}.png", best_mat[id%3, :, :, 0] * cv2.resize(rect, (512,512)))
-            # with open("report.html") as template:
-            #     for 
+                    rectangle = np.array(np.where(best_mat[id%3, :, :, 0] * cv2.resize(rect, (512,512))>0)).T
+                    w,h = rectangle[-1] - rectangle[0]
+                    export_rect = best_mat[id%3, rectangle[0,0]:rectangle[0,0]+h+1, rectangle[0,1]:rectangle[0,1]+w+1]
+                    cv2.imwrite(f"tmp/rect{id%3}_{j}.png", cv2.resize(export_rect, (512,512)))
+
             d3[id%3] = frame
 
 
@@ -170,15 +167,15 @@ while True:
         cv2.putText(mat_frame, "a - analyze", (mat_frame.shape[1]-250, 55), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
         cv2.putText(mat_frame, "f - next frame", (mat_frame.shape[1]-250, 75), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
         cv2.putText(mat_frame, "b - back", (mat_frame.shape[1]-250, 95), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
-        # if reports:
-        #     offset = 115
-        #     for i, s in enumerate(reports):
-        #         offset+=20+((i)%3==0)*20
-        #         cv2.putText(mat_frame, f"{s}", (mat_frame.shape[1]-500, offset), 
-        #              cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
+
         cv2.imshow("ARCADE", mat_frame)
         k = cv2.waitKey(1)
         if k == ord('b'):
             break
         if k != -1 and k != ord('q'):
             command = k
+
+import os
+from glob import glob
+for i in glob("tmp/*"):
+    os.remove(i)
