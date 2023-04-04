@@ -12,6 +12,10 @@ import supervision as sv
 from utils.preprocess.contrast_func import improve_contrast
 from utils.region_segmentation.extract_cat import calculate_pixel_size, calculate_region_width
 from scipy.interpolate import make_interp_spline
+import time
+import jinja2
+import pdfkit
+from datetime import datetime
 parser = argparse.ArgumentParser(
                     prog='Coronary Angiography Analysis Pipeline',
                     description='This program identifies coronary regions according to the Syntax Score methodology, detects atherosclerotic plaques inside them, and provides health report',
@@ -31,7 +35,8 @@ while True:
     cv2.imshow("ARCADE", img)
     if cv2.waitKey() == ord('u'):
         file = easygui.fileopenbox()
-        dcm = dcmread(file).pixel_array
+        dcm_data = dcmread(file)
+        dcm = dcm_data.pixel_array
     elif cv2.waitKey() == ord('q'):
         break
 
@@ -39,13 +44,15 @@ while True:
     best_mat = np.expand_dims(best_mat, 3)
     print("Found 3 best frames: ", best_mat.shape)
     mat_frame = np.ones((512,1024,3), dtype=np.uint8)*255
-    d3 = np.concatenate([best_mat, best_mat, best_mat], axis=3).astype(np.uint8)
+    d3_orig = np.concatenate([best_mat, best_mat, best_mat], axis=3).astype(np.uint8)
+    d3 = d3_orig.copy()
     print("Converted to 3-dimensional RGB", d3.shape)
     id = 0
     command=0
-
+    reports = None
+    report_part = np.ones((3,512,512,3))*255
     while True:
-        if command == ord('f'):
+        if command == ord('f'): 
             id += 1
             command=0
         elif command == ord('a'):
@@ -57,15 +64,14 @@ while True:
             pos = np.where(msks.sum(axis=0).sum(axis=0)>0)  
             stenosis = np.sum(msks[:,:,pos[0]], axis=2)
             report = ""
+            reports = []
             print(len(class_mat), "instances of stenosis found")
             sten_intercepts = np.zeros((len(class_mat), 512, 512))
-            for i, (cl_name, rect, conf) in enumerate(class_mat):
-                # for mask in masks: 
-                #     if rect[(rect>0) & (mask.numpy()>0)].shape[0]>0:
-                #         sten[(rect>0) & (mask.numpy()>0)] = 1
-                sten_intercepts[i] = (cv2.resize(masks.permute(1,2,0).numpy(), (512,512)).sum(axis=2)>0) * cv2.resize(rect, (512,512))
 
+            for i, (cl_name, rect, conf) in enumerate(class_mat):
+                sten_intercepts[i] = (cv2.resize(masks.permute(1,2,0).numpy(), (512,512)).sum(axis=2)>0) * cv2.resize(rect, (512,512))
                 print(i, sten_intercepts[i].sum())
+
             hold = np.ones((len(class_mat)))
             for i, sten1 in enumerate(sten_intercepts):
                 if sten1.sum() != 0:
@@ -82,29 +88,26 @@ while True:
                     hold[i] = 0
             pix_size = calculate_pixel_size(pred)
             print(hold)
-            for i, mask_intercept in enumerate(sten_intercepts[hold>0]):
-                print(mask_intercept.shape)
-                
-                widths = calculate_region_width(mask_intercept, pix_size)
+            for idx, mask_intercept in zip(np.where(hold>0)[0], sten_intercepts[hold>0]):
+                widths = calculate_region_width(mask_intercept, pix_size)[5:-5]
                 print(len(widths))
-                # fig.scatter(np.arange(len(widths)), widths)
                 X_Y_Spline = make_interp_spline(np.arange(len(widths)), widths) 
-  
                 # Returns evenly spaced numbers 
                 # over a specified interval. 
                 X_ = np.linspace(np.arange(len(widths)).min(), np.arange(len(widths)).max(), 500) 
                 Y_ = X_Y_Spline(X_) 
                 # Plotting the Graph 
-                plt.figure(i)
+                print("(id%3)*100+idx", (id%3)*100+idx)
+                plt.figure((id%3)*100+idx)
                 plt.plot(X_, Y_)
-                # plt.plot(np.arange(len(widths)), widths)
-                plt.savefig(f"graph{i}.png")
+                plt.savefig(f"tmp/graph{id%3*100+idx}.png")
+
             for j, (cl_name, rect, conf) in enumerate(class_mat):
                 if hold[j] == 1:
                     for i, mask in enumerate(masks): 
                         if rect[(rect>0) & (mask.numpy()>0)].shape[0]>0:
                             report += f"Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]} with confidence {conf*100:.2f}%. Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%.\n"
-
+                            reports+=[f"Stenosis type {cl_name} found in {names[pred.boxes.cls[i].item()]}", f"with confidence {conf*100:.2f}%.", f"Area covered: {rect[(rect>0) & (mask.numpy()>0)].shape[0]/mask[mask.numpy()>0].numpy().shape[0]*100:.2f}%."]
             print(report)
             # pix_size = calculate_pixel_size(pred)
             # print(calculate_region_width(stenosis, pix_size))
@@ -126,28 +129,56 @@ while True:
                 in detections
             ]
             frame = poly_annotator.annotate(
-                scene=d3[id%3], 
+                scene=d3_orig[id%3].copy(), 
                 detections=detections, 
                 labels=labels,
                 skip_label=False
             ) 
             # print(frame.shape, frame[stenosis>0].shape)
             frame[sten_intercepts[hold>0].sum(axis=0)>0] = np.array([0,0,255])
+            report_frame = np.ones((512,512,3))*255
+            # report_part[id%3] = d3[id%3]
+            # (mat_frame.shape[1]-500, offset)
+            print(reports)
+            if reports:
+                offset = 115
+                for i, s in enumerate(reports):
+                    offset+=20+((i)%3==0)*20
+                    cv2.putText(report_frame, s, (12,offset), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 1, cv2.LINE_AA)
+            report_part[id%3] = report_frame
+
+            template_loader = jinja2.FileSystemLoader('./')
+            template_env = jinja2.Environment(loader=template_loader)
+            template = template_env.get_template('report.html')
+
+            context = {'name': dcm_data.PatientID, 'dob': dcm_data.PatientBirthDate, 'doe': f"{dcm_data.StudyDate[:4]} \
+                       {dcm_data.StudyDate[4:6]} {dcm_data.StudyDate[6:]}, {dcm_data.StudyTime[:2]}:{dcm_data.StudyTime[2:4]}:{dcm_data.StudyTime[4:]}"}
+            output_text = template.render(context)
+            output_text = output_text.split("\n")
+            cv2.imwrite(f"tmp/d3{id%3}.png", d3[id%3])
+            for j, (cl_name, rect, conf) in enumerate(class_mat):
+                if hold[j] == 1:
+                    cv2.imwrite(f"tmp/rect{j}.png", best_mat[id%3, :, :, 0] * cv2.resize(rect, (512,512)))
+            # with open("report.html") as template:
+            #     for 
+            d3[id%3] = frame
 
 
         mat_frame[0:512,0:512] = d3[id%3]
+        mat_frame[:, 512:1024] = report_part[id%3]
         cv2.putText(mat_frame, "a - analyze", (mat_frame.shape[1]-250, 55), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
         cv2.putText(mat_frame, "f - next frame", (mat_frame.shape[1]-250, 75), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
         cv2.putText(mat_frame, "b - back", (mat_frame.shape[1]-250, 95), cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
+        # if reports:
+        #     offset = 115
+        #     for i, s in enumerate(reports):
+        #         offset+=20+((i)%3==0)*20
+        #         cv2.putText(mat_frame, f"{s}", (mat_frame.shape[1]-500, offset), 
+        #              cv2.FONT_HERSHEY_SIMPLEX,0.6, (0,0,255), 1, cv2.LINE_AA)
         cv2.imshow("ARCADE", mat_frame)
         k = cv2.waitKey(1)
         if k == ord('b'):
             break
         if k != -1 and k != ord('q'):
             command = k
-
-        
-
-
-
-    

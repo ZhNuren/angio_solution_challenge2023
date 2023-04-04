@@ -15,3 +15,7 @@ angio
 utilst/senosis_segmentation/__pycache__
 utils/region_segmentation/__pycache__
 utils/preprocess/__pycache__
+tmp/*
+utils/binary_segmentation/__pycache__
+test.ipynb
+
