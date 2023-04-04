@@ -58,6 +58,7 @@ while True:
                 command=0
                 
             elif command == ord('a'):
+                lesionfound = 0
                 path = os.path.abspath(".")
                 if(os.path.exists(f'{path}/tmp/report{id%3}_Patient{dcm_data.PatientID}.pdf')):
                     os.remove(f'{path}/tmp/report{id%3}_Patient{dcm_data.PatientID}.pdf')
@@ -95,17 +96,6 @@ while True:
                     else:
                         hold[i] = 0
                 pix_size = calculate_pixel_size(pred)
-                # for idx, mask_intercept in zip(np.where(hold>0)[0], sten_intercepts[hold>0]):
-                #     widths = calculate_region_width(mask_intercept, pix_size)[5:-5]
-                #     X_Y_Spline = make_interp_spline(np.arange(len(widths)), widths) 
-                #     X_ = np.linspace(np.arange(len(widths)).min(), np.arange(len(widths)).max(), 500) 
-                #     Y_ = X_Y_Spline(X_) 
-                #     plt.figure(time.time_ns())
-                #     plt.plot(X_, Y_)
-                #     plt.ylabel("width of stenosis")
-                #     plt.savefig(f"tmp/graph{id%3}_{idx}.png")
-
-  
                 for j, (cl_name, rect, conf) in enumerate(class_mat):
                     if hold[j] == 1:
                         for i, mask in enumerate(masks): 
@@ -129,7 +119,7 @@ while True:
                                 Y_ = X_Y_Spline(X_) 
                                 plt.figure(time.time_ns())
                                 plt.plot(X_, Y_)
-                                plt.ylabel("width of stenosis")
+                                plt.ylabel("width of stenosis in millimeters")
                                 plt.savefig(f"tmp/graph{id%3}_{j}_{i}.png")
 
 
@@ -197,8 +187,7 @@ while True:
                         template_env = jinja2.Environment(loader=template_loader)
                         template = template_env.get_template('report.html')
 
-                        context = {'name': dcm_data.PatientID, 'dob': dcm_data.PatientBirthDate, 'doe': f"{dcm_data.StudyDate[:4]} \
-                                {dcm_data.StudyDate[4:6]} {dcm_data.StudyDate[6:]}, {dcm_data.StudyTime[:2]}:{dcm_data.StudyTime[2:4]}:{dcm_data.StudyTime[4:]}", 'date':time.strftime('%Y.%m.%d-%H:%M:%S')}
+                        context = {'name': dcm_data.PatientID, 'dob': f"{dcm_data.PatientBirthDate[:4]}.{dcm_data.PatientBirthDate[4:6]}.{dcm_data.PatientBirthDate[6:]}", 'doe': f"{dcm_data.StudyDate[:4]} {dcm_data.StudyDate[4:6]} {dcm_data.StudyDate[6:]}, {dcm_data.StudyTime[:2]}:{dcm_data.StudyTime[2:4]}:{dcm_data.StudyTime[4:]}", 'date':time.strftime('%Y.%m.%d-%H:%M:%S')}
                         output_text = template.render(context)
                         output_text = output_text.split("\n")
                         output_text = output_text[:8] + [f'<img src="{path}\\tmp\\d3{id%3}.png" class="center"><br>'] + [html_report] + output_text[8:]
